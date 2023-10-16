@@ -137,7 +137,7 @@ class bic(nn.Module):
         self.old_network = deepcopy(self.network)
         self.old_network.eval()
         self.prev_cls_num = self.accu_cls_num
-        
+        '''
         # update buffer
         buffer.reduce_old_data(self.cur_task_id, self.accu_cls_num)
         val_transform = test_loaders[0].dataset.trfms
@@ -145,12 +145,13 @@ class bic(nn.Module):
                       self.cur_task_id, self.accu_cls_num, self.cur_cls_indexes,
                       self.device)
         
+        
         # compute class mean vector via samples in buffer
         self.class_means = self.calc_class_mean(buffer,
                                                train_loader,
                                                val_transform,
                                                self.device).to(self.device)
-
+        '''
         self.cur_task_id += 1
         self.lamda = self.prev_cls_num / self.accu_cls_num
 
@@ -174,15 +175,6 @@ class bic(nn.Module):
         for epoch in range(1, self.epochs + 1):
             self.network.train()
             losses = 0.0
-            '''
-            for batch_idx, (images, labels) in enumerate(train_loader):
-                print(f'Batch Index: {batch_idx}')
-                print(images)
-                print(labels)
-            '''
-
-
-
             for i, batch in enumerate(train_loader):
                 
                 image = batch['image']
@@ -195,7 +187,8 @@ class bic(nn.Module):
                     if self.old_network is not None:
                         old_logits = self.old_network(image).detach()
 
-                        hat_pai_k = F.softmax(old_logits / self.T, dim=1)
+                        #hat_pai_k = F.softmax(old_logits / self.T, dim=1)
+                        hat_pai_k = F.softmax(old_logits[:, : self.prev_cls_num] / self.T, dim=1)
                         log_pai_k = F.log_softmax(logits[:, : self.prev_cls_num] / self.T, dim=1)
                         distill_loss = -torch.mean(torch.sum(hat_pai_k * log_pai_k, dim=1))
 

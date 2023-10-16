@@ -220,6 +220,7 @@ class Trainer(object):
         for task_idx in range(self.task_num):
             print("================Task {} Start!================".format(task_idx))
             self.buffer.total_classes += self.init_cls_num if task_idx == 0 else self.inc_cls_num
+
             if hasattr(self.model, 'before_task'):
                 self.model.before_task(task_idx, self.buffer, self.train_loader.get_loader(task_idx), self.test_loader.get_loader(task_idx))
             
