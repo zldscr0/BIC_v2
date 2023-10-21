@@ -41,11 +41,6 @@ class bic(nn.Module):
     def __init__(self, backbone, feat_dim, num_class, **kwargs):
         super().__init__()
         #dic = {"backbone": backbone, "device": self.device}
-        #print(kwargs)
-        #print(feat_dim)
-        #print(num_class)
-        #for key, value in kwargs.items():
-        #    print(f"{key}: {value}")
         # device setting
         self.device = kwargs['device']
         
@@ -65,8 +60,8 @@ class bic(nn.Module):
         self.prev_cls_num = 0
 
         # the total class num containing this task
-        #self.accu_cls_num = 0
-        self.accu_cls_num = kwargs['inc_cls_num']
+        self.accu_cls_num = 0
+        #self.accu_cls_num = kwargs['inc_cls_num']
 
         # T
         self.T = 2
@@ -88,7 +83,7 @@ class bic(nn.Module):
         
 
         # class prototype vector
-        self.class_means = None
+        #self.class_means = None
 
 
 
@@ -114,20 +109,21 @@ class bic(nn.Module):
         x = x.to(self.device)
         y = y.to(self.device)
         
-        logits = self.network(x)
+        #logits = self.network(x)
+        logits = self.network(x)[:, :self.accu_cls_num]
         pred = torch.argmax(logits, dim=1)
-
         acc = torch.sum(pred == y).item()
         return pred, acc / x.size(0)
  
     def forward(self, x):
         return self.network(x)[:, self.accu_cls_num]
     def before_task(self, task_idx, buffer, train_loader, test_loader):
-        self._stage1_training(train_loader, test_loader)
         if self.cur_task_id == 0:
             self.accu_cls_num = self.init_cls_num
+            self._stage1_training(train_loader, test_loader)
         else:
             self.accu_cls_num += self.inc_cls_num
+            self._stage1_training(train_loader, test_loader)
             self._stage2_bias_correction(train_loader, test_loader)
         
         self.cur_cls_indexes = np.arange(self.prev_cls_num, self.accu_cls_num)
