@@ -225,36 +225,54 @@ class Trainer(object):
                 self.model.before_task(task_idx, self.buffer, self.train_loader.get_loader(task_idx), self.test_loader.get_loader(task_idx))
             
             dataloader = self.train_loader.get_loader(task_idx)
+            buffer_datasets = copy.deepcopy(dataloader.dataset)
+            buffer_datasets.images=[]
+            buffer_datasets.labels=[]
+             
+            buffer_datasets.images.extend(self.buffer.images)
+            buffer_datasets.labels.extend(self.buffer.labels)
+
+
+
             if isinstance(self.buffer, LinearBuffer) and task_idx != 0:
-                datasets = dataloader.dataset
-                datasets.images.extend(self.buffer.images)
-                datasets.labels.extend(self.buffer.labels)
-                dataloader = DataLoader(
-                    datasets,
-                    shuffle = True,
-                    batch_size = self.config['batch_size'],
-                    drop_last = True
-                )
-            '''
-            dataloader = self.train_loader.get_loader(task_idx)
-            train_datasets = dataloader.dataset
+                if self.config["classifier"]["name"] == "bic":
+                    total_samples = len(buffer_datasets.images)
+                    print(total_samples)
+                    train_size = int(0.9 * total_samples)
+                    val_size = total_samples - train_size
+                    #print(type(buffer_datasets))
+                    train_dataset, val_dataset = torch.utils.data.random_split(buffer_datasets, [train_size, val_size])
+                    
+                    #print(train_dataset.dataset)
+                    datasets = dataloader.dataset
+                    datasets.images.extend(train_dataset.dataset.images)
+                    datasets.labels.extend(train_dataset.dataset.labels)
+
+                    dataloader = DataLoader(
+                        datasets,
+                        shuffle=True,
+                        batch_size=self.config['batch_size'],
+                        drop_last=True
+                        )
+
+                    val_dataloader = DataLoader(
+                        val_dataset,
+                        shuffle=True,  
+                        batch_size=self.config['batch_size'],
+                        drop_last=True
+                    )
+                else:
+                    datasets = dataloader.dataset
+                    datasets.images.extend(self.buffer.images)
+                    datasets.labels.extend(self.buffer.labels)
+                    dataloader = DataLoader(
+                        datasets,
+                        shuffle = True,
+                        batch_size = self.config['batch_size'],
+                        drop_last = True
+                    )
+
             
-            train_ratio = 0.8
-            val_ratio = 1 - train_ratio
-
-            # 计算划分的样本数量
-            train_size = int(train_ratio * len(train_loader.dataset))
-            val_size = len(train_loader.dataset) - train_size
-
-            # 划分数据集
-            train_dataset, val_dataset = random_split(train_loader.dataset, [train_size, val_size])
-
-            # 定义 DataLoader
-            batch_size = 64
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
-            
-            '''
 
             print("================Task {} Training!================".format(task_idx))
             print("The training samples number: {}".format(len(dataloader.dataset)))
@@ -280,12 +298,12 @@ class Trainer(object):
             
                 self.scheduler.step()
             
-            if self.config["classifier"]["name"] == "bic":
+            if self.config["classifier"]["name"] == "bic" and task_idx > 0:
                 print("================ Train on the train set (stage2)================")
                 for epoch_idx in range(self.init_epoch if task_idx == 0 else self.inc_epoch):
                     print("learning rate: {}".format(self.scheduler.get_last_lr()))
                     print("================ Train on the train set ================")
-                    train_meter = self.stage2_train(epoch_idx, dataloader)
+                    train_meter = self.stage2_train(epoch_idx, val_dataloader)
                     print("Epoch [{}/{}] |\tLoss: {:.3f} \tAverage Acc: {:.3f} ".format(epoch_idx, self.init_epoch if task_idx == 0 else self.inc_epoch, train_meter.avg('loss'), train_meter.avg("acc1")))
 
 
@@ -363,15 +381,15 @@ class Trainer(object):
         with tqdm(total=len(dataloader)) as pbar:
             for batch_idx, batch in enumerate(dataloader):
                 output, acc, loss = self.model.observe(batch)
-
-                self.optimizer.zero_grad()
-
-                loss.backward()
-
+                if self.config['classifier']['name']!='GEM':
+                    self.optimizer.zero_grad()
+                    loss.backward()
                 self.optimizer.step()
+
                 pbar.update(1)
                 
                 meter.update("acc1", acc)
+                meter.update("loss", loss.item())
 
 
         return meter

@@ -52,6 +52,7 @@ class bic(nn.Module):
         #dic = {"backbone": backbone, "device": self.device}
         # device setting
         self.device = kwargs['device']
+        self.backbone = backbone
         self.bias_layer1 = BiasLayer().to(self.device)
         self.bias_layer2 = BiasLayer().to(self.device)
         self.bias_layer3 = BiasLayer().to(self.device)
@@ -111,10 +112,10 @@ class bic(nn.Module):
         for i, layer in enumerate(self.bias_layers):
             layer.printParam(i)
         self.previous_model = deepcopy(self.model)
+        self.bias_optimizer = self.optimizer_cls(params=self.bias_layers[self.T].parameters(), **self.optimizer_kwargs)
         self.T += 1
         self.seen_cls += self.inc_cls_num
-        self.bias_optimizer = self.optimizer_cls(params=self.bias_layers[self.T].parameters(), **self.optimizer_kwargs)
-       
+        
     def stage1(self, data):
         #print("Training ... ")
         #losses = []

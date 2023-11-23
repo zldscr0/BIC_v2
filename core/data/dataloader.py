@@ -31,6 +31,9 @@ def get_dataloader(config, mode, cls_map=None):
     trfms_list.append(transforms.Normalize(mean=MEAN, std=STD))
     trfms = transforms.Compose(trfms_list)
 
+    trfms_list.append(transforms.RandomCrop(32, padding=4))
+    trfms_list.append(transforms.RandomHorizontalFlip())
+
     if cls_map is None:
         cls_list = os.listdir(os.path.join(data_root, mode))
         perm = np.random.permutation(len(cls_list))
