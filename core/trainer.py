@@ -232,6 +232,13 @@ class Trainer(object):
             buffer_datasets.images.extend(self.buffer.images)
             buffer_datasets.labels.extend(self.buffer.labels)
 
+            (
+                _, __,
+                self.optimizer,
+                self.scheduler,
+            ) = self._init_optim(self.config)
+
+
 
 
             if isinstance(self.buffer, LinearBuffer) and task_idx != 0:
@@ -256,7 +263,7 @@ class Trainer(object):
                         )
 
                     val_dataloader = DataLoader(
-                        val_dataset,
+                        val_dataset.dataset,
                         shuffle=True,  
                         batch_size=self.config['batch_size'],
                         drop_last=True
