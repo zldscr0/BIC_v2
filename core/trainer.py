@@ -224,15 +224,7 @@ class Trainer(object):
             if hasattr(self.model, 'before_task'):
                 self.model.before_task(task_idx, self.buffer, self.train_loader.get_loader(task_idx), self.test_loader.get_loader(task_idx))
             
-            (
-                _, __,
-                self.optimizer,
-                self.scheduler,
-            ) = self._init_optim(self.config)
-
-
             dataloader = self.train_loader.get_loader(task_idx)
-
             if isinstance(self.buffer, LinearBuffer) and task_idx != 0:
                 datasets = dataloader.dataset
                 datasets.images.extend(self.buffer.images)
@@ -243,7 +235,27 @@ class Trainer(object):
                     batch_size = self.config['batch_size'],
                     drop_last = True
                 )
+            '''
+            dataloader = self.train_loader.get_loader(task_idx)
+            train_datasets = dataloader.dataset
             
+            train_ratio = 0.8
+            val_ratio = 1 - train_ratio
+
+            # 计算划分的样本数量
+            train_size = int(train_ratio * len(train_loader.dataset))
+            val_size = len(train_loader.dataset) - train_size
+
+            # 划分数据集
+            train_dataset, val_dataset = random_split(train_loader.dataset, [train_size, val_size])
+
+            # 定义 DataLoader
+            batch_size = 64
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+            
+            '''
+
             print("================Task {} Training!================".format(task_idx))
             print("The training samples number: {}".format(len(dataloader.dataset)))
 
@@ -253,6 +265,7 @@ class Trainer(object):
                 print("================ Train on the train set ================")
                 train_meter = self._train(epoch_idx, dataloader)
                 print("Epoch [{}/{}] |\tLoss: {:.3f} \tAverage Acc: {:.3f} ".format(epoch_idx, self.init_epoch if task_idx == 0 else self.inc_epoch, train_meter.avg('loss'), train_meter.avg("acc1")))
+
 
                 if (epoch_idx+1) % self.val_per_epoch == 0 or (epoch_idx+1)==self.inc_epoch:
                     print("================ Test on the test set ================")
@@ -266,6 +279,29 @@ class Trainer(object):
                     )
             
                 self.scheduler.step()
+            
+            if self.config["classifier"]["name"] == "bic":
+                print("================ Train on the train set (stage2)================")
+                for epoch_idx in range(self.init_epoch if task_idx == 0 else self.inc_epoch):
+                    print("learning rate: {}".format(self.scheduler.get_last_lr()))
+                    print("================ Train on the train set ================")
+                    train_meter = self.stage2_train(epoch_idx, dataloader)
+                    print("Epoch [{}/{}] |\tLoss: {:.3f} \tAverage Acc: {:.3f} ".format(epoch_idx, self.init_epoch if task_idx == 0 else self.inc_epoch, train_meter.avg('loss'), train_meter.avg("acc1")))
+
+
+                    if (epoch_idx+1) % self.val_per_epoch == 0 or (epoch_idx+1)==self.inc_epoch:
+                        print("================ Test on the test set (stage2)================")
+                        test_acc = self._validate(task_idx)
+                        best_acc = max(test_acc["avg_acc"], best_acc)
+                        print(
+                        " * Average Acc: {:.3f} Best acc {:.3f}".format(test_acc["avg_acc"], best_acc)
+                        )
+                        print(
+                        " Per-Task Acc:{}".format(test_acc['per_task_acc'])
+                        )
+            
+                    self.scheduler.step()
+                
 
             if hasattr(self.model, 'after_task'):
                 self.model.after_task(task_idx, self.buffer, self.train_loader.get_loader(task_idx), self.test_loader.get_loader(task_idx))
@@ -275,7 +311,38 @@ class Trainer(object):
                 hearding_update(self.train_loader.get_loader(task_idx).dataset, self.buffer, self.model.backbone, self.device)
             elif self.buffer.strategy == 'random':
                 random_update(self.train_loader.get_loader(task_idx).dataset, self.buffer)
+    
+    def stage2_train(self, epoch_idx, dataloader):
+        """
+        The train stage.
 
+        Args:
+            epoch_idx (int): Epoch index
+
+        Returns:
+            dict:  {"avg_acc": float}
+        """
+        self.model.train()
+        meter = self.train_meter
+        meter.reset()
+        
+
+        with tqdm(total=len(dataloader)) as pbar:
+            for batch_idx, batch in enumerate(dataloader):
+                output, acc, loss = self.model.bias_observe(batch)
+
+                #self.optimizer.zero_grad()
+
+                #loss.backward()
+
+                #self.optimizer.step()
+                pbar.update(1)
+                
+                meter.update("acc1", acc)
+                meter.update("loss", loss.item())
+
+
+        return meter
 
 
     def _train(self, epoch_idx, dataloader):
