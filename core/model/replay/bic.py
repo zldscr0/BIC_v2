@@ -60,6 +60,7 @@ class bic(nn.Module):
         self.bias_layer5 = BiasLayer().to(self.device)
         self.bias_layers=[self.bias_layer1, self.bias_layer2, self.bias_layer3, self.bias_layer4, self.bias_layer5]
         
+        
 
         self.model = Model(backbone, feat_dim, num_class, self.device)
         self.seen_cls = kwargs['init_cls_num']
@@ -72,6 +73,11 @@ class bic(nn.Module):
         optimizer_name = optimizer_info['name']
         self.optimizer_kwargs = optimizer_info['kwargs']
         self.optimizer_cls = getattr(optim, optimizer_name)
+        '''
+        all_params = []
+        for layer in self.bias_layers:
+            all_params += list(layer.parameters())
+        '''
         self.bias_optimizer = self.optimizer_cls(params=self.bias_layers[self.T].parameters(), **self.optimizer_kwargs)
         self.criterion = nn.CrossEntropyLoss()
         self.previous_model = None
@@ -112,8 +118,9 @@ class bic(nn.Module):
         for i, layer in enumerate(self.bias_layers):
             layer.printParam(i)
         self.previous_model = deepcopy(self.model)
-        self.bias_optimizer = self.optimizer_cls(params=self.bias_layers[self.T].parameters(), **self.optimizer_kwargs)
         self.T += 1
+        if self.T < self.task_num:
+            self.bias_optimizer = self.optimizer_cls(params=self.bias_layers[self.T].parameters(), **self.optimizer_kwargs)
         self.seen_cls += self.inc_cls_num
         
     def stage1(self, data):
@@ -123,7 +130,7 @@ class bic(nn.Module):
         x, y = data['image'], data['label']
         x = x.to(self.device)
         y = y.to(self.device)
-   
+        self.bias_optimizer = self.optimizer_cls(params=self.bias_layers[self.T].parameters(), **self.optimizer_kwargs)
         p = self.model(x)
         p = self.bias_forward(p)
         

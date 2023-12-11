@@ -56,6 +56,8 @@ class Trainer(object):
         self.train_meter, self.test_meter = self._init_meter()
 
         self.val_per_epoch = config['val_per_epoch']
+        if self.config["classifier"]["name"] == "bic":
+            self.stage2_epoch = config['stage2_epoch']
 
     def _init_logger(self, config, mode='train'):
         '''
@@ -141,8 +143,13 @@ class Trainer(object):
             tuple: A tuple of optimizer, scheduler.
         """
         params_dict_list = {"params": self.model.parameters()}
-    
-        optimizer = get_instance(
+
+        if self.config["classifier"]["name"] == "bic":
+            optimizer = get_instance(
+            torch.optim, "optimizer", config, params=self.model.backbone.parameters()
+           )
+        else :
+            optimizer = get_instance(
             torch.optim, "optimizer", config, params=self.model.parameters()
         )
         scheduler = GradualWarmupScheduler(
@@ -239,31 +246,39 @@ class Trainer(object):
             ) = self._init_optim(self.config)
 
 
-
-
             if isinstance(self.buffer, LinearBuffer) and task_idx != 0:
+                #split the dataset
                 if self.config["classifier"]["name"] == "bic":
-                    total_samples = len(buffer_datasets.images)
+                    total_samples = len(buffer_datasets)
                     print(total_samples)
                     train_size = int(0.9 * total_samples)
                     val_size = total_samples - train_size
-                    #print(type(buffer_datasets))
-                    train_dataset, val_dataset = torch.utils.data.random_split(buffer_datasets, [train_size, val_size])
                     
-                    #print(train_dataset.dataset)
+                    from torch.utils.data import random_split
+                    train_dataset_buffer, val_dataset_buffer = random_split(buffer_datasets, [train_size, val_size]) 
+                    
                     datasets = dataloader.dataset
-                    datasets.images.extend(train_dataset.dataset.images)
-                    datasets.labels.extend(train_dataset.dataset.labels)
+                    total_samples = len(datasets.images)
+                    print(total_samples)
+                    train_size = int(0.9 * total_samples)
+                    val_size = total_samples - train_size
+
+                    train_datasets, val_datasets = torch.utils.data.random_split(datasets, [train_size, val_size])
+                    
+
+                    from torch.utils.data import ConcatDataset
+                    train_datasets = ConcatDataset([train_datasets, train_dataset_buffer])
+                    val_datasets = ConcatDataset([val_datasets, val_dataset_buffer])
 
                     dataloader = DataLoader(
-                        datasets,
+                        train_datasets,
                         shuffle=True,
                         batch_size=self.config['batch_size'],
                         drop_last=True
                         )
 
                     val_dataloader = DataLoader(
-                        val_dataset.dataset,
+                        val_datasets,
                         shuffle=True,  
                         batch_size=self.config['batch_size'],
                         drop_last=True
@@ -305,13 +320,24 @@ class Trainer(object):
             
                 self.scheduler.step()
             
-            if self.config["classifier"]["name"] == "bic" and task_idx > 0:
+            #bic stage2_train
+            if self.config["classifier"]["name"] == "bic" and task_idx != 0:
+                self.model.backbone.eval()
+                (     _, __,
+                self.optimizer,
+                self.scheduler,
+                ) = self._init_optim(self.config)
+                
+                scheduler = GradualWarmupScheduler(
+                    self.model.bias_optimizer, self.config
+                )
+
                 print("================ Train on the train set (stage2)================")
-                for epoch_idx in range(self.init_epoch if task_idx == 0 else self.inc_epoch):
+                for epoch_idx in range(self.stage2_epoch):
                     print("learning rate: {}".format(self.scheduler.get_last_lr()))
                     print("================ Train on the train set ================")
                     train_meter = self.stage2_train(epoch_idx, val_dataloader)
-                    print("Epoch [{}/{}] |\tLoss: {:.3f} \tAverage Acc: {:.3f} ".format(epoch_idx, self.init_epoch if task_idx == 0 else self.inc_epoch, train_meter.avg('loss'), train_meter.avg("acc1")))
+                    print("Epoch [{}/{}] |\tLoss: {:.3f} \tAverage Acc: {:.3f} ".format(epoch_idx, self.stage2_epoch, train_meter.avg('loss'), train_meter.avg("acc1")))
 
 
                     if (epoch_idx+1) % self.val_per_epoch == 0 or (epoch_idx+1)==self.inc_epoch:
