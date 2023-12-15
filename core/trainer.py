@@ -284,7 +284,7 @@ class Trainer(object):
 
                     val_num = self.buffer.buffer_size/(task_idx*20)
                     ratio = val_num/len(datasets.images)
-                    print(ratio)
+                    #print(ratio)
 
                     images_train, images_val, labels_train, labels_val = train_test_split(datasets.images,
                     datasets.labels,
@@ -311,8 +311,8 @@ class Trainer(object):
                     train_datasets = ConcatDataset([train_datasets, train_dataset_buffer])
                     val_datasets = ConcatDataset([val_datasets, val_dataset_buffer])
                     '''
-                    print(train_datasets.labels)
-                    print(val_datasets.labels)
+                    #print(train_datasets.labels)
+                    #print(val_datasets.labels)
 
                     dataloader = DataLoader(
                         train_datasets,
