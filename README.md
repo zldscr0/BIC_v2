@@ -3,7 +3,7 @@
 
 2. 目前仅能做CIFAR100-5这一任务，若需做其它任务，除了修改超参数之外，还需要修改bias_layers部分以及验证集加载部分
 
-3. 本份代码实现的bias_layers主要参照https://github.com/sairin1202/BIC，bias_layers的设计并不一定要像这样实现，可以直接设成一个alpha和一个beta，每轮更新alpha和beta，ttps://github.com/sairin1202/BIC的代码库中有关于这个issue的一些回答，有人说这两种实现方法效果应该差不多。
+3. 本份代码实现的bias_layers主要参照 https://github.com/sairin1202/BIC ，bias_layers的设计并不一定要像这样实现，可以直接设成一个alpha和一个beta，每轮更新alpha和beta，https://github.com/sairin1202/BIC 的代码库中有关于这个issue的一些回答，有人说这两种实现方法效果应该差不多。
 
 4.v5的after stage2的结果就是本份代码复现的最好结果。
 
