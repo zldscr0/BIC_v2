@@ -232,12 +232,6 @@ class Trainer(object):
                 self.model.before_task(task_idx, self.buffer, self.train_loader.get_loader(task_idx), self.test_loader.get_loader(task_idx))
             
             dataloader = self.train_loader.get_loader(task_idx)
-            buffer_datasets = copy.deepcopy(dataloader.dataset)
-            buffer_datasets.images=[]
-            buffer_datasets.labels=[]
-             
-            buffer_datasets.images.extend(self.buffer.images)
-            buffer_datasets.labels.extend(self.buffer.labels)
 
             (
                 _, __,
@@ -249,6 +243,16 @@ class Trainer(object):
             if isinstance(self.buffer, LinearBuffer) and task_idx != 0:
                 #split the dataset
                 if self.config["classifier"]["name"] == "bic":
+                    buffer_datasets = copy.deepcopy(dataloader.dataset)
+                    buffer_datasets.images=[]
+                    buffer_datasets.labels=[]
+
+                    train_datasets = copy.deepcopy(buffer_datasets)
+                    val_datasets = copy.deepcopy(buffer_datasets)
+             
+                    buffer_datasets.images.extend(self.buffer.images)
+                    buffer_datasets.labels.extend(self.buffer.labels)
+                    '''
                     total_samples = len(buffer_datasets)
                     print(total_samples)
                     train_size = int(0.9 * total_samples)
@@ -256,8 +260,44 @@ class Trainer(object):
                     
                     from torch.utils.data import random_split
                     train_dataset_buffer, val_dataset_buffer = random_split(buffer_datasets, [train_size, val_size]) 
+                    '''
+
+                    from sklearn.model_selection import train_test_split
+
+                    images_train, images_val, labels_train, labels_val = train_test_split(buffer_datasets.images,
+                    buffer_datasets.labels,
+                    test_size=0.1,  
+                    random_state=42 
+                    )
+
+                    train_datasets.images.extend(images_train)
+                    train_datasets.labels.extend(labels_train)
+
+                    val_datasets.images.extend(images_val)
+                    val_datasets.labels.extend(labels_val)
+
+                    
+                    
+
                     
                     datasets = dataloader.dataset
+
+                    val_num = self.buffer.buffer_size/(task_idx*20)
+                    ratio = val_num/len(datasets.images)
+                    print(ratio)
+
+                    images_train, images_val, labels_train, labels_val = train_test_split(datasets.images,
+                    datasets.labels,
+                    test_size=ratio,  
+                    random_state=42 
+                    )
+
+                    train_datasets.images.extend(images_train)
+                    train_datasets.labels.extend(labels_train)
+
+                    val_datasets.images.extend(images_val)
+                    val_datasets.labels.extend(labels_val)
+                    '''
                     total_samples = len(datasets.images)
                     print(total_samples)
                     train_size = int(0.9 * total_samples)
@@ -266,9 +306,13 @@ class Trainer(object):
                     train_datasets, val_datasets = torch.utils.data.random_split(datasets, [train_size, val_size])
                     
 
+
                     from torch.utils.data import ConcatDataset
                     train_datasets = ConcatDataset([train_datasets, train_dataset_buffer])
                     val_datasets = ConcatDataset([val_datasets, val_dataset_buffer])
+                    '''
+                    print(train_datasets.labels)
+                    print(val_datasets.labels)
 
                     dataloader = DataLoader(
                         train_datasets,
@@ -373,7 +417,9 @@ class Trainer(object):
         Returns:
             dict:  {"avg_acc": float}
         """
-        self.model.train()
+        self.model.eval()
+        for _ in range(len(self.model.bias_layers)):
+            self.model.bias_layers[_].train()
         meter = self.train_meter
         meter.reset()
         
